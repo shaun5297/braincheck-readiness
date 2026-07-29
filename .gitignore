@@ -8,3 +8,4 @@ dist/
 braincheck_data/restricted/
 braincheck_data/assessments/
 braincheck_data/logs/
+.DS_Store

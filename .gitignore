@@ -1,0 +1,10 @@
+.venv/
+.venv-supported/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+braincheck_data/restricted/
+braincheck_data/assessments/
+braincheck_data/logs/

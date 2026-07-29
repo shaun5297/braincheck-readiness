@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "available": false,
+  "message": "未部署已验证模型，系统安全降级到 pilot_rules_v2"
+}
+

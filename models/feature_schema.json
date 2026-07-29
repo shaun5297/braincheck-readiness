@@ -1,0 +1,5 @@
+{
+  "feature_schema_version": "readiness_features_v1",
+  "required_groups": ["behavior", "eeg", "fnirs", "context", "quality"]
+}
+

@@ -1,0 +1,7 @@
+{
+  "normal": {"label": "正常", "action": "进入单位正常流程"},
+  "retest": {"label": "建议复测", "action": "离屏休息10至15分钟后复测"},
+  "rest": {"label": "建议休息", "action": "暂停高风险操作并进行人工评估"},
+  "unable": {"label": "无法评估", "action": "调整设备并重新采集"}
+}
+

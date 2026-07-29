@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "quality_seconds": 30,
+  "baseline_seconds": 45,
+  "sart_trial_count": 180,
+  "sart_seconds": 180,
+  "retest_rest_minutes": [10, 15],
+  "save_raw_xdf": true
+}
+

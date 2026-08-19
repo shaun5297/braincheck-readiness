@@ -27,7 +27,7 @@ class ParticipantView(ttk.Frame):
             widget.grid(row=index, column=1, sticky="ew", pady=5)
         ttk.Checkbutton(self, text="当前存在急性不适", variable=self.discomfort).grid(row=7, column=0, columnspan=2, sticky="w", pady=5)
         ttk.Checkbutton(self, text="我已阅读隐私说明并自愿继续", variable=self.voluntary).grid(row=8, column=0, columnspan=2, sticky="w", pady=5)
-        ttk.Button(self, text="开始检测", command=on_start).grid(row=9, column=1, sticky="e", pady=18)
+        ttk.Button(self, text="开始检测", command=on_start, takefocus=False).grid(row=9, column=1, sticky="e", pady=18)
         self.columnconfigure(1, weight=1)
 
     def values(self) -> dict[str, object]:

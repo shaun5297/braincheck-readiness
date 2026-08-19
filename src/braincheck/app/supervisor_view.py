@@ -11,7 +11,7 @@ class SupervisorView(ttk.Frame):
         ttk.Label(self, textvariable=self.title, font=("", 26, "bold")).pack(anchor="w")
         ttk.Label(self, textvariable=self.detail, wraplength=640, justify="left").pack(anchor="w", pady=18)
         ttk.Label(self, text="结果只描述当次班次状态，不表示个人长期能力，也不构成自动化岗位决定。", wraplength=640).pack(anchor="w", pady=12)
-        ttk.Button(self, text="返回首页", command=on_restart).pack(anchor="e")
+        ttk.Button(self, text="返回首页", command=on_restart, takefocus=False).pack(anchor="e")
 
     def show_result(self, payload: dict[str, object], *, competition_demo: bool = False) -> None:
         label = str(payload["label"])

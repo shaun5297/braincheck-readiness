@@ -48,9 +48,21 @@ class OperatorView(ttk.Frame):
         self.progress.pack(fill="x", pady=14)
         actions = ttk.Frame(self)
         actions.pack(fill="x")
-        self.cancel_button = ttk.Button(actions, text="中止采集", command=self._request_abort, state="disabled")
+        self.cancel_button = ttk.Button(
+            actions,
+            text="中止采集",
+            command=self._request_abort,
+            state="disabled",
+            takefocus=False,
+        )
         self.cancel_button.pack(side="left")
-        self.action_button = ttk.Button(actions, text="生成演示结果", command=self._on_demo_complete, state="disabled")
+        self.action_button = ttk.Button(
+            actions,
+            text="生成演示结果",
+            command=self._on_demo_complete,
+            state="disabled",
+            takefocus=False,
+        )
         self.action_button.pack(side="right")
 
     def begin(
@@ -63,6 +75,9 @@ class OperatorView(ttk.Frame):
         synthetic_demo: bool,
     ) -> None:
         self._cancel_scheduled()
+        # 把键盘焦点从"开始检测"等按钮上移开，避免 SART 任务中的空格键误触发按钮
+        # （ttk 按钮在有焦点时，空格键会先被按钮 class 绑定处理并激活按钮）。
+        self.focus_set()
         self._session = None
         self._stimuli = ()
         self._trial_stimulus_timestamp = None

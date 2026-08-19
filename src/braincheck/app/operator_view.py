@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tkinter as tk
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -8,6 +9,15 @@ from tkinter import StringVar, messagebox, ttk
 from ..tasks.sart import stimulus_sequence
 from ..workflow.live_screening import LiveScreeningOutcome, LiveScreeningSession
 from ..workflow.timing import BASELINE_SECONDS, QUALITY_SECONDS, SART_SECONDS, SART_TRIAL_COUNT
+from .theme import BG, FONT_FAMILY, PHASE_COLORS, PRIMARY, TEXT, TEXT_MUTED
+
+PHASE_NAMES = {
+    "connecting": "连接设备",
+    "quality": "信号质量检查",
+    "baseline": "睁眼基线",
+    "sart": "SART 任务",
+    "processing": "生成结果",
+}
 
 
 class OperatorView(ttk.Frame):
@@ -39,13 +49,46 @@ class OperatorView(ttk.Frame):
         self.detail = StringVar(value="")
         self.countdown = StringVar(value="")
         self.signal_status = StringVar(value="EEG / fNIRS / Motion：尚未连接")
-        ttk.Label(self, text="设备与任务", font=("", 22, "bold")).pack(anchor="w")
-        ttk.Label(self, textvariable=self.status, font=("", 28, "bold"), anchor="center").pack(fill="both", expand=True, pady=(24, 8))
-        ttk.Label(self, textvariable=self.detail, font=("", 15), wraplength=650, justify="center", anchor="center").pack(fill="x", pady=8)
-        ttk.Label(self, textvariable=self.countdown, font=("", 18, "bold"), anchor="center").pack(fill="x", pady=8)
-        ttk.Label(self, textvariable=self.signal_status, wraplength=650, anchor="center").pack(fill="x", pady=8)
+
+        ttk.Label(self, text="设备与任务", style="Title.TLabel").pack(anchor="center", pady=(0, 4))
+        self.phase_badge = tk.Label(
+            self,
+            text="",
+            font=(FONT_FAMILY, 13, "bold"),
+            padx=20,
+            pady=6,
+        )
+        self.phase_badge.pack(pady=(8, 4))
+        tk.Label(
+            self,
+            textvariable=self.status,
+            font=(FONT_FAMILY, 34, "bold"),
+            fg=PRIMARY,
+            bg=BG,
+        ).pack(fill="both", expand=True, pady=(20, 6))
+        ttk.Label(
+            self,
+            textvariable=self.detail,
+            font=(FONT_FAMILY, 15),
+            wraplength=680,
+            justify="center",
+            anchor="center",
+        ).pack(fill="x", pady=6)
+        tk.Label(
+            self,
+            textvariable=self.countdown,
+            font=(FONT_FAMILY, 18, "bold"),
+            fg=TEXT,
+            bg=BG,
+        ).pack(fill="x", pady=6)
         self.progress = ttk.Progressbar(self, mode="determinate", maximum=QUALITY_SECONDS + BASELINE_SECONDS + SART_SECONDS)
         self.progress.pack(fill="x", pady=14)
+        ttk.Label(
+            self,
+            textvariable=self.signal_status,
+            style="Muted.TLabel",
+            wraplength=680,
+        ).pack(fill="x", pady=6)
         actions = ttk.Frame(self)
         actions.pack(fill="x")
         self.cancel_button = ttk.Button(
@@ -84,11 +127,13 @@ class OperatorView(ttk.Frame):
         self._trial_response_timestamp = None
         self._context = dict(context)
         self.progress.configure(value=0)
+        self._set_phase("connecting")
         if synthetic_demo:
             self.status.set("合成情景演示")
             self.detail.set("此入口不连接设备，仅用于检查四态结果页面。真实功能视频请使用比赛演示模式。")
             self.countdown.set("")
             self.signal_status.set("数据来源：合成演示数据")
+            self.phase_badge.config(text="演示模式", bg="#EAF1FC", fg=PRIMARY)
             self.action_button.configure(state="normal")
             self.cancel_button.configure(state="normal", text="返回", command=self._on_cancel)
             return
@@ -116,6 +161,7 @@ class OperatorView(ttk.Frame):
     def _start_quality(self) -> None:
         assert self._session is not None
         self._session.start_phase("quality")
+        self._set_phase("quality")
         self.status.set("信号质量检查")
         self.detail.set("请保持睁眼、自然呼吸，尽量不要说话或移动。")
         self._start_timed_phase(QUALITY_SECONDS, 0, self._finish_quality)
@@ -124,6 +170,7 @@ class OperatorView(ttk.Frame):
         assert self._session is not None
         self._session.end_phase("quality")
         self._session.start_phase("baseline")
+        self._set_phase("baseline")
         self.status.set("睁眼基线")
         self.detail.set("请注视中央，保持放松和清醒。")
         self._start_timed_phase(BASELINE_SECONDS, QUALITY_SECONDS, self._finish_baseline)
@@ -139,6 +186,7 @@ class OperatorView(ttk.Frame):
     def _start_sart(self) -> None:
         assert self._session is not None
         self._session.start_phase("sart")
+        self._set_phase("sart")
         self._stimuli = stimulus_sequence(count=SART_TRIAL_COUNT, seed=self._session.sequence)
         self._trial_index = 0
         self.detail.set("除数字 3 外均按空格；看到 3 时不要按")
@@ -148,6 +196,7 @@ class OperatorView(ttk.Frame):
         assert self._session is not None
         if self._trial_index >= len(self._stimuli):
             self._session.end_phase("sart")
+            self._set_phase("processing")
             self.status.set("正在生成结果…")
             self.detail.set("正在完成特征提取和数据质量门控。")
             self.countdown.set("")
@@ -201,6 +250,14 @@ class OperatorView(ttk.Frame):
         self.unbind_all("<space>")
         self.progress.configure(value=self.progress["maximum"])
         self._on_live_complete(outcome)
+
+    def _set_phase(self, phase: str) -> None:
+        colors = PHASE_COLORS.get(phase, PHASE_COLORS["processing"])
+        self.phase_badge.config(
+            text=PHASE_NAMES.get(phase, phase),
+            bg=colors["bg"],
+            fg=colors["fg"],
+        )
 
     def _start_timed_phase(
         self,

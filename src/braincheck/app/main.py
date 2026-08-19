@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import tkinter as tk
 from pathlib import Path
-from tkinter import StringVar, Tk, ttk
+from tkinter import Tk, ttk
 
 from ..reports.participant import build as participant_report
 from ..workflow.live_screening import LiveScreeningOutcome
@@ -11,6 +12,7 @@ from .operator_view import OperatorView
 from .participant_view import ParticipantView
 from .router import Router
 from .supervisor_view import SupervisorView
+from .theme import FONT_FAMILY, PRIMARY, PRIMARY_BG, setup_style
 
 
 class BrainCheckApp:
@@ -32,13 +34,36 @@ class BrainCheckApp:
         self.scenario = scenario
         self.sequence = 0
         root.title("脑安检 - BrainCheck Readiness")
-        root.geometry("760x650")
-        header = ttk.Frame(root, padding=(16, 10))
+        root.geometry("880x740")
+        root.minsize(760, 640)
+        setup_style(root)
+
+        header = ttk.Frame(root, style="Header.TFrame", padding=(22, 14))
         header.pack(fill="x")
-        ttk.Label(header, text="脑安检", font=("", 18, "bold")).pack(side="left")
+        brand = ttk.Frame(header, style="Header.TFrame")
+        brand.pack(side="left")
+        ttk.Label(brand, text="脑安检", style="Header.TLabel", font=(FONT_FAMILY, 20, "bold"), foreground=PRIMARY).pack(side="left")
+        ttk.Label(
+            brand,
+            text="班前认知准备度",
+            style="Header.TLabel",
+            font=(FONT_FAMILY, 12),
+            foreground="#8A94A6",
+        ).pack(side="left", padx=(10, 0), pady=(4, 0))
         mode_label = "合成演示模式" if demo else ("比赛演示模式" if competition_demo else "正式模式")
-        self.badge = StringVar(value=mode_label)
-        ttk.Label(header, textvariable=self.badge).pack(side="right")
+        badge_bg = PRIMARY_BG if not (demo or competition_demo) else "#FFF4E5"
+        badge_fg = PRIMARY if not (demo or competition_demo) else "#B45309"
+        badge = tk.Label(
+            header,
+            text=mode_label,
+            font=(FONT_FAMILY, 12, "bold"),
+            bg=badge_bg,
+            fg=badge_fg,
+            padx=14,
+            pady=5,
+        )
+        badge.pack(side="right")
+        ttk.Separator(header, orient="horizontal").pack(fill="x", pady=(12, 0))
         self.router = Router(root)
         self.router.pack(fill="both", expand=True)
         self.participant = ParticipantView(self.router, self.start)
@@ -60,11 +85,12 @@ class BrainCheckApp:
     def start(self) -> None:
         values = self.participant.values()
         if not values["participant_id"] or not values["voluntary"]:
-            self.badge.set("请确认匿名工号与自愿继续")
+            self.participant.set_error("请确认匿名工号与自愿继续")
             return
         if values["acute_discomfort"]:
-            self.badge.set("存在急性不适，请停止检测并人工处理")
+            self.participant.set_error("存在急性不适，请停止检测并人工处理")
             return
+        self.participant.set_error("")
         self.sequence = max(
             self.sequence + 1,
             self.service.next_sequence(str(values["participant_id"])),
@@ -82,7 +108,16 @@ class BrainCheckApp:
         features, quality = demo_payload(self.scenario)
         values = self.participant.values()
         features.context.update(self._context(values))
-        result = self.service.assess(str(values["participant_id"]), features, quality, sequence=self.sequence)
+        # “建议休息”在真实流程中是复测阶段才会给出的结论；演示 rest 场景时
+        # 以复测身份评估，使严重疲劳特征命中 rest 规则，避免与 retest 结果重复。
+        parent_assessment_id = "BC-demo-previous" if self.scenario == "rest" else None
+        result = self.service.assess(
+            str(values["participant_id"]),
+            features,
+            quality,
+            sequence=self.sequence,
+            parent_assessment_id=parent_assessment_id,
+        )
         self.result.show_result(participant_report(result, personal_baseline_available=False))
         if self.debug_view:
             self.debug_view.update_payload({"result": result.to_dict(), "features": features.to_dict(), "quality": quality.to_dict()})

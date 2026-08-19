@@ -47,9 +47,11 @@ class XDFWriter:
                 raise ValueError(f"unsupported channel format: {channel_format}")
         self._chunk(3, bytes(payload), stream_id)
 
+    def clock_offset(self, stream_id: int, collection_time: float, offset: float) -> None:
+        self._chunk(4, struct.pack("<dd", collection_time, offset), stream_id)
+
     def footer(self, stream_id: int, first: float, last: float, count: int) -> None:
         self._chunk(6, f"<info><first_timestamp>{first}</first_timestamp><last_timestamp>{last}</last_timestamp><sample_count>{count}</sample_count></info>".encode(), stream_id)
 
     def close(self) -> None:
         self._stream.close()
-

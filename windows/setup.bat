@@ -1,15 +1,16 @@
 @echo off
 setlocal
 set "PROJECT_ROOT=%~dp0.."
-set "PYTHON_SPEC="
-py -3.13 -c "import sys" >nul 2>&1 && set "PYTHON_SPEC=-3.13"
-if not defined PYTHON_SPEC py -3.12 -c "import sys" >nul 2>&1 && set "PYTHON_SPEC=-3.12"
-if not defined PYTHON_SPEC py -3.11 -c "import sys" >nul 2>&1 && set "PYTHON_SPEC=-3.11"
-if not defined PYTHON_SPEC (
+set "PYTHON_CMD="
+py -3.13 -c "import sys" >nul 2>&1 && set "PYTHON_CMD=py -3.13"
+if not defined PYTHON_CMD py -3.12 -c "import sys" >nul 2>&1 && set "PYTHON_CMD=py -3.12"
+if not defined PYTHON_CMD py -3.11 -c "import sys" >nul 2>&1 && set "PYTHON_CMD=py -3.11"
+if not defined PYTHON_CMD python -c "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 14) else 1)" >nul 2>&1 && set "PYTHON_CMD=python"
+if not defined PYTHON_CMD (
   echo Need Python 3.11, 3.12, or 3.13.
   exit /b 1
 )
-py %PYTHON_SPEC% -m venv "%PROJECT_ROOT%\.venv-supported" || exit /b 1
+%PYTHON_CMD% -m venv "%PROJECT_ROOT%\.venv-supported" || exit /b 1
 "%PROJECT_ROOT%\.venv-supported\Scripts\python.exe" -m pip install --upgrade pip || exit /b 1
 "%PROJECT_ROOT%\.venv-supported\Scripts\python.exe" -m pip install -e "%PROJECT_ROOT%" || exit /b 1
 "%PROJECT_ROOT%\.venv-supported\Scripts\braincheck-self-test.exe" || exit /b 1

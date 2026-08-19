@@ -1,0 +1,24 @@
+name: Windows validation
+
+on:
+  push:
+    branches: [main, "agent/**"]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install and run packaged self-test
+        shell: cmd
+        run: windows\setup.bat
+      - name: Run Windows regression suite
+        shell: cmd
+        run: windows\self_test.bat
+      - name: Compile source tree
+        shell: cmd
+        run: .venv-supported\Scripts\python.exe -m compileall -q src tests

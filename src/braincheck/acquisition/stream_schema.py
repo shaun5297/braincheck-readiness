@@ -29,4 +29,5 @@ class StreamDescriptor:
     name: str
     channel_count: int
     nominal_srate: float
-
+    stream_type: str = ""
+    source_id: str = ""

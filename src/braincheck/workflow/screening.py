@@ -26,6 +26,21 @@ class ScreeningService:
     data_root: Path
     model_manifest: Path | None = None
 
+    def next_sequence(self, participant_id: str, *, now: datetime | None = None) -> int:
+        current = now or datetime.now()
+        prefix = f"BC-{current:%Y%m%d}-{participant_id}-"
+        directory = self.data_root / "assessments" / current.strftime("%Y-%m-%d")
+        sequences: list[int] = []
+        if directory.exists():
+            for candidate in directory.iterdir():
+                if not candidate.is_dir() or not candidate.name.startswith(prefix):
+                    continue
+                try:
+                    sequences.append(int(candidate.name.removeprefix(prefix)))
+                except ValueError:
+                    continue
+        return max(sequences, default=0) + 1
+
     def assess(
         self,
         participant_id: str,
@@ -34,11 +49,24 @@ class ScreeningService:
         *,
         sequence: int = 1,
         parent_assessment_id: str | None = None,
+        competition_demo: bool = False,
     ) -> AssessmentResult:
         identifier = assessment_id(participant_id, sequence)
         if not quality.passed:
             codes = quality.reason_codes
             result = AssessmentResult(identifier, participant_id, "unable", 1.0, "failed", codes, explain(codes), "quality_gate_v1")
+        elif competition_demo:
+            codes = ("competition_demo_placeholder",)
+            result = AssessmentResult(
+                identifier,
+                participant_id,
+                "normal",
+                0.0,
+                "good",
+                codes,
+                explain(codes),
+                "competition_demo_placeholder_v1",
+            )
         else:
             status, confidence, codes, algorithm, model_version = infer(
                 features,

@@ -15,9 +15,9 @@ REASON_TEXT = {
     "behavior_shift_from_personal_baseline": "行为指标偏离个人清醒基线",
     "eeg_shift_from_personal_baseline": "脑电特征偏离个人清醒基线",
     "multimodal_shift": "多模态指标同时出现偏移",
+    "competition_demo_placeholder": "比赛功能演示占位结果，不代表真实状态结论",
 }
 
 
 def explain(codes: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(REASON_TEXT.get(code, code) for code in codes)
-

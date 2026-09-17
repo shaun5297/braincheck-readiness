@@ -36,11 +36,13 @@ class SupervisorView(ttk.Frame):
         self.reasons = StringVar(value="")
         self.action = StringVar(value="")
         self.confidence = StringVar(value="")
+        self.eegnet = StringVar(value="未启用")
         rows = (
             ("数据质量", self.quality),
             ("主要原因", self.reasons),
             ("建议动作", self.action),
             ("置信度", self.confidence),
+            ("EEGNet 推理", self.eegnet),
         )
         for index, (label, var) in enumerate(rows):
             ttk.Label(card, text=label, style="Section.TLabel").grid(
@@ -68,18 +70,55 @@ class SupervisorView(ttk.Frame):
             command=on_restart,
             takefocus=False,
         ).grid(row=4, column=1, pady=(24, 4), ipadx=16)
+        self.retest_button = ttk.Button(
+            self, text="休息调整后进行关联复测", state="disabled", takefocus=False
+        )
+        self.retest_button.grid(row=5, column=1, pady=4)
 
-    def show_result(self, payload: dict[str, object], *, competition_demo: bool = False) -> None:
+    def show_result(
+        self,
+        payload: dict[str, object],
+        *,
+        competition_demo: bool = False,
+        eegnet: dict | None = None,
+    ) -> None:
+        self.retest_button.configure(
+            state="normal"
+            if payload.get("status") == "retest" and not competition_demo
+            else "disabled"
+        )
+        if eegnet and eegnet.get("status") == "ok":
+            self.eegnet.set(
+                f"P(Impaired)={float(eegnet['p_impaired']):.3f}，{eegnet['window_count']} 个合格窗口\n未独立验证，不参与本次四态判定"
+                if eegnet.get("training_mode") == "pilot_fit_only"
+                else f"P(Impaired)={float(eegnet['p_impaired']):.3f}"
+            )
+            if eegnet.get("decision_mode") == "pilot_assisted":
+                self.eegnet.set(
+                    f"P(Impaired)={float(eegnet['p_impaired']):.3f}，{eegnet['window_count']} 个合格窗口\n参与多源融合，工程阈值 {eegnet['engineering_threshold']:.2f}（未校准）"
+                )
+        else:
+            self.eegnet.set("未输出预测" if eegnet else "未启用")
         status = str(payload.get("status", "unable"))
         colors = STATUS_COLORS.get(status, STATUS_COLORS["unable"])
         label = str(payload["label"])
-        display = label if not (competition_demo and label != "无法评估") else f"{label}（演示）"
-        self.badge.config(text=f"{colors['icon']}  {display}", bg=colors["bg"], fg=colors["fg"])
+        display = (
+            label
+            if not (competition_demo and label != "无法评估")
+            else f"{label}（演示）"
+        )
+        self.badge.config(
+            text=f"{colors['icon']}  {display}", bg=colors["bg"], fg=colors["fg"]
+        )
         reasons = (
             "；".join(str(value) for value in payload.get("reason_text", ()))
             or "未发现达到复测条件的当次状态信号"
         )
-        notice = "\n结果声明：比赛功能演示占位，不代表真实受试状态结论。" if competition_demo else ""
+        notice = (
+            "\n结果声明：比赛功能演示占位，不代表真实受试状态结论。"
+            if competition_demo
+            else ""
+        )
         self.quality.set(str(payload.get("data_quality", "")))
         self.reasons.set(reasons)
         self.action.set(f"{payload.get('recommended_action', '')}{notice}")

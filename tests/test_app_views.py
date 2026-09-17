@@ -34,6 +34,30 @@ def _find_buttons(widget: ttk.Widget) -> list[ttk.Button]:
 
 @unittest.skipUnless(_TK_OK, "tkinter 不可用")
 class ButtonFocusRegressionTests(unittest.TestCase):
+    def test_retest_link_is_explicit_and_cleared_for_another_subject(self):
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Tk()
+            try:
+                app = BrainCheckApp(root, data_root=Path(directory), demo=False, competition_demo=False, scenario="normal", debug=False)
+                app.last_assessment = SimpleNamespace(status="retest", assessment_id="BC-parent", participant_id="A001")
+                app.start_retest()
+                self.assertEqual(app.parent_assessment_id, "BC-parent")
+                with patch.object(app.operator, "begin"):
+                    app.start()
+                    self.assertEqual(app.parent_assessment_id, "BC-parent")
+                    app.participant.participant_id.set("A002")
+                    app.start()
+                    self.assertIsNone(app.parent_assessment_id)
+                app.start_retest()
+                app.restart()
+                self.assertIsNone(app.parent_assessment_id)
+            finally:
+                root.destroy()
+
     def test_all_buttons_do_not_take_keyboard_focus(self) -> None:
         """所有操作按钮不应获得键盘焦点, 否则空格/回车会误触按钮。"""
         import tempfile

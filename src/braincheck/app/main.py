@@ -25,24 +25,37 @@ class BrainCheckApp:
         competition_demo: bool,
         scenario: str,
         debug: bool,
+        model_manifest: Path | None = None,
+        eegnet_mode: str = "shadow",
     ) -> None:
         self.root = root
         self.data_root = data_root
-        self.service = ScreeningService(data_root)
+        self.service = ScreeningService(
+            data_root, model_manifest=model_manifest, eegnet_mode=eegnet_mode
+        )
         self.demo = demo
         self.competition_demo = competition_demo
         self.scenario = scenario
         self.sequence = 0
+        self.parent_assessment_id = None
+        self.retest_participant_id = None
+        self.last_assessment = None
         root.title("脑安检 - BrainCheck Readiness")
-        root.geometry("880x740")
-        root.minsize(760, 640)
+        root.geometry("880x860")
+        root.minsize(760, 800)
         setup_style(root)
 
         header = ttk.Frame(root, style="Header.TFrame", padding=(22, 14))
         header.pack(fill="x")
         brand = ttk.Frame(header, style="Header.TFrame")
         brand.pack(side="left")
-        ttk.Label(brand, text="脑安检", style="Header.TLabel", font=(FONT_FAMILY, 20, "bold"), foreground=PRIMARY).pack(side="left")
+        ttk.Label(
+            brand,
+            text="脑安检",
+            style="Header.TLabel",
+            font=(FONT_FAMILY, 20, "bold"),
+            foreground=PRIMARY,
+        ).pack(side="left")
         ttk.Label(
             brand,
             text="班前认知准备度",
@@ -50,7 +63,17 @@ class BrainCheckApp:
             font=(FONT_FAMILY, 12),
             foreground="#8A94A6",
         ).pack(side="left", padx=(10, 0), pady=(4, 0))
-        mode_label = "合成演示模式" if demo else ("比赛演示模式" if competition_demo else "正式模式")
+        mode_label = (
+            "合成演示模式"
+            if demo
+            else ("比赛演示模式" if competition_demo else "正式模式")
+        )
+        if model_manifest is not None and not (demo or competition_demo):
+            mode_label = (
+                "EEG 先导推理 / 不参与四态判定"
+                if eegnet_mode == "shadow"
+                else "EEGNet 多源融合"
+            )
         badge_bg = PRIMARY_BG if not (demo or competition_demo) else "#FFF4E5"
         badge_fg = PRIMARY if not (demo or competition_demo) else "#B45309"
         badge = tk.Label(
@@ -74,6 +97,7 @@ class BrainCheckApp:
             on_cancel=self.restart,
         )
         self.result = SupervisorView(self.router, self.restart)
+        self.result.retest_button.configure(command=self.start_retest)
         self.router.add("participant", self.participant)
         self.router.add("operator", self.operator)
         self.router.add("result", self.result)
@@ -91,6 +115,8 @@ class BrainCheckApp:
             self.participant.set_error("存在急性不适，请停止检测并人工处理")
             return
         self.participant.set_error("")
+        if self.retest_participant_id != str(values["participant_id"]):
+            self.parent_assessment_id = None
         self.sequence = max(
             self.sequence + 1,
             self.service.next_sequence(str(values["participant_id"])),
@@ -102,6 +128,7 @@ class BrainCheckApp:
             sequence=self.sequence,
             context=self._context(values),
             synthetic_demo=self.demo,
+            model_manifest=self.service.model_manifest,
         )
 
     def complete_demo(self) -> None:
@@ -118,9 +145,17 @@ class BrainCheckApp:
             sequence=self.sequence,
             parent_assessment_id=parent_assessment_id,
         )
-        self.result.show_result(participant_report(result, personal_baseline_available=False))
+        self.result.show_result(
+            participant_report(result, personal_baseline_available=False)
+        )
         if self.debug_view:
-            self.debug_view.update_payload({"result": result.to_dict(), "features": features.to_dict(), "quality": quality.to_dict()})
+            self.debug_view.update_payload(
+                {
+                    "result": result.to_dict(),
+                    "features": features.to_dict(),
+                    "quality": quality.to_dict(),
+                }
+            )
         self.router.show("result")
 
     def complete_live(self, outcome: LiveScreeningOutcome) -> None:
@@ -132,10 +167,14 @@ class BrainCheckApp:
             outcome.quality,
             sequence=self.sequence,
             competition_demo=self.competition_demo,
+            parent_assessment_id=self.parent_assessment_id,
         )
+        self.last_assessment = result
         self.result.show_result(
             participant_report(result, personal_baseline_available=False),
-            competition_demo=result.algorithm_version == "competition_demo_placeholder_v1",
+            competition_demo=result.algorithm_version
+            == "competition_demo_placeholder_v1",
+            eegnet=outcome.features.metadata.get("eegnet"),
         )
         if self.debug_view:
             self.debug_view.update_payload(
@@ -160,7 +199,18 @@ class BrainCheckApp:
         }
 
     def restart(self) -> None:
+        self.parent_assessment_id = None
+        self.retest_participant_id = None
         self.router.show("participant")
+
+    def start_retest(self) -> None:
+        if self.last_assessment is None or self.last_assessment.status != "retest":
+            return
+        self.parent_assessment_id = self.last_assessment.assessment_id
+        self.retest_participant_id = self.last_assessment.participant_id
+        self.participant.participant_id.set(self.retest_participant_id)
+        self.router.show("participant")
+        self.participant.set_error("已关联上次记录，请休息调整后重新检测")
 
 
 def run(
@@ -170,6 +220,8 @@ def run(
     competition_demo: bool = False,
     scenario: str = "normal",
     debug: bool = False,
+    model_manifest: Path | None = None,
+    eegnet_mode: str = "shadow",
 ) -> None:
     root = Tk()
     BrainCheckApp(
@@ -179,5 +231,7 @@ def run(
         competition_demo=competition_demo,
         scenario=scenario,
         debug=debug,
+        model_manifest=model_manifest,
+        eegnet_mode=eegnet_mode,
     )
     root.mainloop()

@@ -8,7 +8,12 @@ from tkinter import StringVar, messagebox, ttk
 
 from ..tasks.sart import stimulus_sequence
 from ..workflow.live_screening import LiveScreeningOutcome, LiveScreeningSession
-from ..workflow.timing import BASELINE_SECONDS, QUALITY_SECONDS, SART_SECONDS, SART_TRIAL_COUNT
+from ..workflow.timing import (
+    BASELINE_SECONDS,
+    QUALITY_SECONDS,
+    SART_SECONDS,
+    SART_TRIAL_COUNT,
+)
 from .theme import BG, FONT_FAMILY, PHASE_COLORS, PRIMARY, TEXT, TEXT_MUTED
 
 PHASE_NAMES = {
@@ -50,7 +55,9 @@ class OperatorView(ttk.Frame):
         self.countdown = StringVar(value="")
         self.signal_status = StringVar(value="EEG / fNIRS / Motion：尚未连接")
 
-        ttk.Label(self, text="设备与任务", style="Title.TLabel").pack(anchor="center", pady=(0, 4))
+        ttk.Label(self, text="设备与任务", style="Title.TLabel").pack(
+            anchor="center", pady=(0, 4)
+        )
         self.phase_badge = tk.Label(
             self,
             text="",
@@ -81,7 +88,11 @@ class OperatorView(ttk.Frame):
             fg=TEXT,
             bg=BG,
         ).pack(fill="x", pady=6)
-        self.progress = ttk.Progressbar(self, mode="determinate", maximum=QUALITY_SECONDS + BASELINE_SECONDS + SART_SECONDS)
+        self.progress = ttk.Progressbar(
+            self,
+            mode="determinate",
+            maximum=QUALITY_SECONDS + BASELINE_SECONDS + SART_SECONDS,
+        )
         self.progress.pack(fill="x", pady=14)
         ttk.Label(
             self,
@@ -116,6 +127,7 @@ class OperatorView(ttk.Frame):
         sequence: int,
         context: dict[str, object],
         synthetic_demo: bool,
+        model_manifest: Path | None = None,
     ) -> None:
         self._cancel_scheduled()
         # 把键盘焦点从"开始检测"等按钮上移开，避免 SART 任务中的空格键误触发按钮
@@ -130,21 +142,31 @@ class OperatorView(ttk.Frame):
         self._set_phase("connecting")
         if synthetic_demo:
             self.status.set("合成情景演示")
-            self.detail.set("此入口不连接设备，仅用于检查四态结果页面。真实功能视频请使用比赛演示模式。")
+            self.detail.set(
+                "此入口不连接设备，仅用于检查四态结果页面。真实功能视频请使用比赛演示模式。"
+            )
             self.countdown.set("")
             self.signal_status.set("数据来源：合成演示数据")
             self.phase_badge.config(text="演示模式", bg="#EAF1FC", fg=PRIMARY)
             self.action_button.configure(state="normal")
-            self.cancel_button.configure(state="normal", text="返回", command=self._on_cancel)
+            self.cancel_button.configure(
+                state="normal", text="返回", command=self._on_cancel
+            )
             return
 
         self.action_button.configure(state="disabled")
-        self.cancel_button.configure(state="normal", text="中止采集", command=self._request_abort)
+        self.cancel_button.configure(
+            state="normal", text="中止采集", command=self._request_abort
+        )
         self.status.set("正在连接设备…")
-        self.detail.set("正在创建 BrainCheck Marker 并检查 EEG、fNIRS、Motion 与设备 Marker 流。")
+        self.detail.set(
+            "正在创建 BrainCheck Marker 并检查 EEG、fNIRS、Motion 与设备 Marker 流。"
+        )
         self.signal_status.set("正在扫描 LSL")
         self.update_idletasks()
-        session = LiveScreeningSession(data_root, participant_id, sequence=sequence)
+        session = LiveScreeningSession(
+            data_root, participant_id, sequence=sequence, model_manifest=model_manifest
+        )
         try:
             session.start()
         except Exception as exc:
@@ -173,7 +195,9 @@ class OperatorView(ttk.Frame):
         self._set_phase("baseline")
         self.status.set("睁眼基线")
         self.detail.set("请注视中央，保持放松和清醒。")
-        self._start_timed_phase(BASELINE_SECONDS, QUALITY_SECONDS, self._finish_baseline)
+        self._start_timed_phase(
+            BASELINE_SECONDS, QUALITY_SECONDS, self._finish_baseline
+        )
 
     def _finish_baseline(self) -> None:
         assert self._session is not None
@@ -187,7 +211,9 @@ class OperatorView(ttk.Frame):
         assert self._session is not None
         self._session.start_phase("sart")
         self._set_phase("sart")
-        self._stimuli = stimulus_sequence(count=SART_TRIAL_COUNT, seed=self._session.sequence)
+        self._stimuli = stimulus_sequence(
+            count=SART_TRIAL_COUNT, seed=self._session.sequence
+        )
         self._trial_index = 0
         self.detail.set("除数字 3 外均按空格；看到 3 时不要按")
         self._start_trial()
@@ -210,8 +236,12 @@ class OperatorView(ttk.Frame):
         )
         self._trial_response_timestamp = None
         remaining = len(self._stimuli) - self._trial_index
-        self.countdown.set(f"正式任务 · {self._trial_index + 1}/{len(self._stimuli)} · 约剩余 {remaining} 秒")
-        self.progress.configure(value=QUALITY_SECONDS + BASELINE_SECONDS + self._trial_index)
+        self.countdown.set(
+            f"正式任务 · {self._trial_index + 1}/{len(self._stimuli)} · 约剩余 {remaining} 秒"
+        )
+        self.progress.configure(
+            value=QUALITY_SECONDS + BASELINE_SECONDS + self._trial_index
+        )
         self._update_signal_status()
         self._schedule(500, lambda: self.status.set("+"))
         self._schedule(1000, self._finish_trial)
@@ -220,8 +250,13 @@ class OperatorView(ttk.Frame):
         assert self._session is not None
         stimulus = self._stimuli[self._trial_index]
         response_time = None
-        if self._trial_response_timestamp is not None and self._trial_stimulus_timestamp is not None:
-            response_time = max(0.0, self._trial_response_timestamp - self._trial_stimulus_timestamp)
+        if (
+            self._trial_response_timestamp is not None
+            and self._trial_stimulus_timestamp is not None
+        ):
+            response_time = max(
+                0.0, self._trial_response_timestamp - self._trial_stimulus_timestamp
+            )
         self._session.record_trial(
             trial=self._trial_index + 1,
             stimulus=stimulus,
@@ -289,13 +324,23 @@ class OperatorView(ttk.Frame):
             return
         summary = self._session.recorder_summary()
         labels = (("eeg", "EEG"), ("fnirs", "fNIRS"), ("motion", "Motion"))
-        parts = [f"{label} {int((summary.get(kind) or {}).get('sample_count') or 0):,}" for kind, label in labels]
+        parts = [
+            f"{label} {int((summary.get(kind) or {}).get('sample_count') or 0):,}"
+            for kind, label in labels
+        ]
         self.signal_status.set("实时样本：" + " · ".join(parts))
 
     def _handle_space(self, _event: object) -> str:
-        if self._session is None or not self._stimuli or self._trial_index >= len(self._stimuli):
+        if (
+            self._session is None
+            or not self._stimuli
+            or self._trial_index >= len(self._stimuli)
+        ):
             return "break"
-        if self._trial_stimulus_timestamp is not None and self._trial_response_timestamp is None:
+        if (
+            self._trial_stimulus_timestamp is not None
+            and self._trial_response_timestamp is None
+        ):
             self._trial_response_timestamp = self._session.clock_now()
         return "break"
 
@@ -303,7 +348,9 @@ class OperatorView(ttk.Frame):
         if self._session is None:
             self._on_cancel()
             return
-        if not messagebox.askyesno("确认中止", "将停止录制并保留已采集的原始数据，是否继续？", parent=self):
+        if not messagebox.askyesno(
+            "确认中止", "将停止录制并保留已采集的原始数据，是否继续？", parent=self
+        ):
             return
         self._cancel_scheduled()
         session, self._session = self._session, None

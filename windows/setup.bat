@@ -12,5 +12,5 @@ if not defined PYTHON_CMD (
 )
 %PYTHON_CMD% -m venv "%PROJECT_ROOT%\.venv-supported" || exit /b 1
 "%PROJECT_ROOT%\.venv-supported\Scripts\python.exe" -m pip install --upgrade pip || exit /b 1
-"%PROJECT_ROOT%\.venv-supported\Scripts\python.exe" -m pip install -e "%PROJECT_ROOT%" || exit /b 1
+"%PROJECT_ROOT%\.venv-supported\Scripts\python.exe" -m pip install -e "%PROJECT_ROOT%[inference]" "torch==2.12.0" || exit /b 1
 "%PROJECT_ROOT%\.venv-supported\Scripts\braincheck-self-test.exe" || exit /b 1

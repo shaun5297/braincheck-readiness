@@ -40,9 +40,12 @@ class LiveScreeningSession:
         recorder_factory: Callable[[Path], Recorder] = Recorder,
         marker_factory: Callable[[Path], MarkerOutlet] = MarkerOutlet,
         clock: Callable[[], float] = lsl_clock,
+        model_manifest: Path | None = None,
     ) -> None:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        self.capture_directory = data_root / "captures" / f"BC-CAP-{timestamp}-{sequence:03d}"
+        self.capture_directory = (
+            data_root / "captures" / f"BC-CAP-{timestamp}-{sequence:03d}"
+        )
         self.raw_xdf = self.capture_directory / "raw.xdf"
         self.marker_audit = self.capture_directory / "markers.jsonl"
         self.context_path = self.capture_directory / "capture.json"
@@ -51,6 +54,7 @@ class LiveScreeningSession:
         self._recorder_factory = recorder_factory
         self._marker_factory = marker_factory
         self._clock = clock
+        self._model_manifest = model_manifest
         self._recorder: Recorder | None = None
         self._marker: MarkerOutlet | None = None
         self._phase_bounds: dict[str, list[float]] = {}
@@ -149,7 +153,9 @@ class LiveScreeningSession:
             self._recorder.stop()
         except Exception as exc:
             self._finished = True
-            self._write_context("recorder_failed", context=context, extra={"failure": str(exc)})
+            self._write_context(
+                "recorder_failed", context=context, extra={"failure": str(exc)}
+            )
             raise
         finally:
             self._marker.close()
@@ -157,7 +163,9 @@ class LiveScreeningSession:
             features, quality = self._build_features(context)
         except Exception as exc:
             self._finished = True
-            self._write_context("processing_failed", context=context, extra={"failure": str(exc)})
+            self._write_context(
+                "processing_failed", context=context, extra={"failure": str(exc)}
+            )
             raise
         features.metadata.update(
             {
@@ -168,7 +176,9 @@ class LiveScreeningSession:
         )
         self._finished = True
         self._write_context("completed", context=context, quality=quality.to_dict())
-        return LiveScreeningOutcome(features, quality, self.capture_directory, self.raw_xdf)
+        return LiveScreeningOutcome(
+            features, quality, self.capture_directory, self.raw_xdf
+        )
 
     def abort(self, reason: str) -> None:
         if not self._started or self._finished:
@@ -183,7 +193,9 @@ class LiveScreeningSession:
                 self._recorder.stop()
         except Exception as exc:
             self._finished = True
-            self._write_context("abort_failed", extra={"abort_reason": reason, "failure": str(exc)})
+            self._write_context(
+                "abort_failed", extra={"abort_reason": reason, "failure": str(exc)}
+            )
             raise
         finally:
             if self._marker is not None:
@@ -196,14 +208,20 @@ class LiveScreeningSession:
             return {}
         return self._recorder.summary()
 
-    def _build_features(self, context: dict[str, object]) -> tuple[ReadinessFeatures, GateResult]:
+    def _build_features(
+        self, context: dict[str, object]
+    ) -> tuple[ReadinessFeatures, GateResult]:
         assert self._recorder is not None
         baseline_start, baseline_end = self._phase_bounds["baseline"]
         sart_start, sart_end = self._phase_bounds["sart"]
-        baseline: dict[str, tuple[tuple[float, ...], tuple[tuple[float, ...], ...]]] = {}
+        baseline: dict[
+            str, tuple[tuple[float, ...], tuple[tuple[float, ...], ...]]
+        ] = {}
         task: dict[str, tuple[tuple[float, ...], tuple[tuple[float, ...], ...]]] = {}
         for kind in ("eeg", "fnirs", "motion"):
-            baseline[kind] = self._recorder.samples_between(kind, baseline_start, baseline_end)
+            baseline[kind] = self._recorder.samples_between(
+                kind, baseline_start, baseline_end
+            )
             task[kind] = self._recorder.samples_between(kind, sart_start, sart_end)
         eeg_rate = self._sample_rate("eeg", (*baseline["eeg"][0], *task["eeg"][0]))
         eeg_baseline = _tail(baseline["eeg"][1], 2048)
@@ -217,12 +235,32 @@ class LiveScreeningSession:
             fnirs_baseline=baseline["fnirs"][1],
             fnirs_task=task["fnirs"][1],
             motion_task=task["motion"][1],
+            motion_timestamps=task["motion"][0],
             stream_timestamps={
                 kind: (*baseline[kind][0], *task[kind][0])
                 for kind in ("eeg", "fnirs", "motion")
             },
         )
-        return process(payload)
+        features, quality = process(payload)
+        from ..inference.eegnet import attach_prediction
+
+        channel_names = getattr(self._recorder, "channel_names", lambda _kind: ())(
+            "eeg"
+        )
+        attach_prediction(
+            features,
+            quality,
+            self._model_manifest,
+            [
+                (baseline_start, baseline_end, *baseline["eeg"]),
+                (sart_start, sart_end, *task["eeg"]),
+            ],
+            (*baseline["motion"][0], *task["motion"][0]),
+            (*baseline["motion"][1], *task["motion"][1]),
+            channel_names=channel_names,
+            nominal_srate=eeg_rate,
+        )
+        return features, quality
 
     def _sample_rate(self, kind: str, timestamps: tuple[float, ...]) -> float:
         assert self._recorder is not None
@@ -234,7 +272,9 @@ class LiveScreeningSession:
         duration = timestamps[-1] - timestamps[0]
         return (len(timestamps) - 1) / duration if duration > 0 else 0.0
 
-    def _push(self, event: str, payload: dict[str, object], *, timestamp: float | None = None) -> None:
+    def _push(
+        self, event: str, payload: dict[str, object], *, timestamp: float | None = None
+    ) -> None:
         if self._marker is None:
             raise RuntimeError("Marker Outlet 尚未启动")
         row = {
@@ -245,7 +285,12 @@ class LiveScreeningSession:
         self._marker.push(event, row, self._clock() if timestamp is None else timestamp)
 
     def _require_recording(self) -> None:
-        if not self._started or self._finished or self._recorder is None or self._marker is None:
+        if (
+            not self._started
+            or self._finished
+            or self._recorder is None
+            or self._marker is None
+        ):
             raise RuntimeError("当前没有进行中的 BrainCheck 采集")
 
     def _write_context(

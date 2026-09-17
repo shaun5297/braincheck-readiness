@@ -16,7 +16,9 @@ from ..quality.gate import GateResult
 from .pipeline import ScreeningInput, process
 
 
-def assessment_id(participant_id: str, sequence: int = 1, *, now: datetime | None = None) -> str:
+def assessment_id(
+    participant_id: str, sequence: int = 1, *, now: datetime | None = None
+) -> str:
     timestamp = now or datetime.now()
     return f"BC-{timestamp:%Y%m%d}-{participant_id}-{sequence:03d}"
 
@@ -25,6 +27,7 @@ def assessment_id(participant_id: str, sequence: int = 1, *, now: datetime | Non
 class ScreeningService:
     data_root: Path
     model_manifest: Path | None = None
+    eegnet_mode: str = "shadow"
 
     def next_sequence(self, participant_id: str, *, now: datetime | None = None) -> int:
         current = now or datetime.now()
@@ -52,9 +55,20 @@ class ScreeningService:
         competition_demo: bool = False,
     ) -> AssessmentResult:
         identifier = assessment_id(participant_id, sequence)
+        quality = self._pilot_quality(features, quality)
+        features.metadata["effective_quality"] = quality.to_dict()
         if not quality.passed:
             codes = quality.reason_codes
-            result = AssessmentResult(identifier, participant_id, "unable", 1.0, "failed", codes, explain(codes), "quality_gate_v1")
+            result = AssessmentResult(
+                identifier,
+                participant_id,
+                "unable",
+                1.0,
+                "failed",
+                codes,
+                explain(codes),
+                "quality_gate_v1",
+            )
         elif competition_demo:
             codes = ("competition_demo_placeholder",)
             result = AssessmentResult(
@@ -72,13 +86,83 @@ class ScreeningService:
                 features,
                 is_retest=parent_assessment_id is not None,
                 model_manifest=self.model_manifest,
+                eegnet_mode=self.eegnet_mode,
             )
-            result = AssessmentResult(identifier, participant_id, status, confidence, "good", codes, explain(codes), algorithm, model_version)
+            result = AssessmentResult(
+                identifier,
+                participant_id,
+                status,
+                confidence,
+                "good",
+                codes,
+                explain(codes),
+                algorithm,
+                model_version,
+            )
         self._save(result, features, quality, parent_assessment_id)
         return result
 
-    def _save(self, result: AssessmentResult, features: ReadinessFeatures, quality: GateResult, parent: str | None) -> None:
-        directory = self.data_root / "assessments" / datetime.now().strftime("%Y-%m-%d") / result.assessment_id
+    def _pilot_quality(
+        self, features: ReadinessFeatures, quality: GateResult
+    ) -> GateResult:
+        """Allow configured motion-only relaxation after clean-window inference."""
+        if (
+            self.eegnet_mode != "pilot_assisted"
+            or quality.passed
+            or set(quality.reason_codes) != {"excessive_motion"}
+            or self.model_manifest is None
+        ):
+            return quality
+        try:
+            m = json.loads(self.model_manifest.read_text())
+            policy = m["pilot_decision_policy"]
+            limit = float(policy["max_motion_artifact_ratio"])
+            evidence = features.metadata.get("eegnet", {})
+            ratio = float(quality.metrics["motion"]["artifact_window_ratio"])
+            eligible = (
+                m.get("training_mode") == "pilot_fit_only"
+                and "pilot_assisted" in m.get("allowed_modes", [])
+                and policy.get("calibrated") is False
+                and policy.get("basis") == "engineering_demo_parameter"
+                and math.isfinite(limit)
+                and 0.2 <= limit <= 0.5
+                and math.isfinite(ratio)
+                and 0 <= ratio <= limit
+                and evidence.get("status") == "ok"
+                and evidence.get("model_sha256") == m.get("model_sha256")
+                and int(evidence.get("window_count", 0)) >= 10
+            )
+            if eligible:
+                evidence["effective_quality_passed"] = True
+                return GateResult(
+                    True,
+                    (),
+                    {
+                        **quality.metrics,
+                        "quality_profile": "pilot_motion_40_clean_windows",
+                        "original_quality_passed": False,
+                        "original_reason_codes": list(quality.reason_codes),
+                        "max_motion_artifact_ratio": limit,
+                        "threshold_calibrated": False,
+                    },
+                )
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+        return quality
+
+    def _save(
+        self,
+        result: AssessmentResult,
+        features: ReadinessFeatures,
+        quality: GateResult,
+        parent: str | None,
+    ) -> None:
+        directory = (
+            self.data_root
+            / "assessments"
+            / datetime.now().strftime("%Y-%m-%d")
+            / result.assessment_id
+        )
         directory.mkdir(parents=True, exist_ok=False)
         files: dict[str, object] = {
             "result.json": result.to_dict(),
@@ -86,7 +170,10 @@ class ScreeningService:
             "quality.json": quality.to_dict(),
         }
         for filename, payload in files.items():
-            (directory / filename).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            (directory / filename).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
         audit = {
             "audit_schema_version": "1.0",
             "event": "assessment_completed",
@@ -96,7 +183,9 @@ class ScreeningService:
             "algorithm_version": result.algorithm_version,
             "model_version": result.model_version,
         }
-        (directory / "audit.jsonl").write_text(json.dumps(audit, ensure_ascii=False) + "\n", encoding="utf-8")
+        (directory / "audit.jsonl").write_text(
+            json.dumps(audit, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
 
 
 def demo_payload(scenario: str) -> tuple[ReadinessFeatures, GateResult]:
@@ -118,7 +207,13 @@ def demo_payload(scenario: str) -> tuple[ReadinessFeatures, GateResult]:
             response = 0.35 + ((index % 5) * (0.10 if impaired else 0.01))
         trials.append(behavior_features.classify_sart_trial(not no_go, response))
     rate = 100.0
-    eeg_baseline = [[math.sin(2 * math.pi * 10 * index / rate), math.sin(2 * math.pi * 10 * index / rate)] for index in range(200)]
+    eeg_baseline = [
+        [
+            math.sin(2 * math.pi * 10 * index / rate),
+            math.sin(2 * math.pi * 10 * index / rate),
+        ]
+        for index in range(200)
+    ]
     eeg_task = [
         [
             math.sin(2 * math.pi * (6 if impaired else 10) * index / rate),
@@ -136,10 +231,18 @@ def demo_payload(scenario: str) -> tuple[ReadinessFeatures, GateResult]:
         eeg_baseline=eeg_baseline,
         eeg_task=eeg_task,
         eeg_sample_rate=rate,
-        fnirs_baseline=[[1.0 + index * 0.001 for _ in range(4)] for index in range(100)],
+        fnirs_baseline=[
+            [1.0 + index * 0.001 for _ in range(4)] for index in range(100)
+        ],
         fnirs_task=[[1.1 + index * 0.001 for _ in range(4)] for index in range(100)],
-        motion_task=[[0.01 * math.sin(index / 10) for _ in range(6)] for index in range(100)],
-        stream_timestamps={"eeg": timestamps, "fnirs": timestamps, "motion": timestamps},
+        motion_task=[
+            [0.01 * math.sin(index / 10) for _ in range(6)] for index in range(100)
+        ],
+        stream_timestamps={
+            "eeg": timestamps,
+            "fnirs": timestamps,
+            "motion": timestamps,
+        },
     )
     features, quality = process(payload)
     features.metadata["demo_mode"] = True

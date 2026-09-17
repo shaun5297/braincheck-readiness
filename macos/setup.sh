@@ -14,5 +14,5 @@ if [[ -z "${PYTHON_BIN}" ]]; then
 fi
 "${PYTHON_BIN}" -m venv "${PROJECT_ROOT}/.venv-supported"
 "${PROJECT_ROOT}/.venv-supported/bin/python" -m pip install --upgrade pip
-"${PROJECT_ROOT}/.venv-supported/bin/python" -m pip install -e "${PROJECT_ROOT}"
+"${PROJECT_ROOT}/.venv-supported/bin/python" -m pip install -e "${PROJECT_ROOT}[inference]" "torch==2.12.0"
 "${PROJECT_ROOT}/.venv-supported/bin/braincheck-self-test"

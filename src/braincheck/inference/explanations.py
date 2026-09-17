@@ -1,4 +1,6 @@
 REASON_TEXT = {
+    "eegnet_pilot_evidence": "EEGNet 参考概率达到工程阈值（尚未独立校准）",
+    "eegnet_impaired_evidence": "EEG 模型达到验证集设定的参考风险阈值（先导模型）",
     "eeg_quality_insufficient": "脑电信号质量不足",
     "fnirs_quality_insufficient": "额区光学信号质量不足",
     "fnirs_saturation": "额区光学信号存在饱和",

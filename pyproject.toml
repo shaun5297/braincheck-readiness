@@ -11,15 +11,16 @@ requires-python = ">=3.11,<3.14"
 dependencies = ["pylsl==1.18.2"]
 
 [project.optional-dependencies]
+inference = ["numpy>=1.26", "torch>=2.6,<3", "pyxdf>=1.17"]
 release = ["pyinstaller>=6.0"]
 
 [project.scripts]
 braincheck = "braincheck.cli.run_braincheck:main"
 braincheck-self-test = "braincheck.cli.self_test:main"
+braincheck-replay = "braincheck.cli.replay_eegnet:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-braincheck = ["config/*.json", "models/*.json"]
-
+braincheck = ["config/*.json", "models/*.json", "models/pilot_eegnet/*.json", "models/pilot_eegnet/*.pt"]

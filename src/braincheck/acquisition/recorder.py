@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import xml.etree.ElementTree as ET
 
 from .discovery import discover
 from .live_streams import LiveBuffer
@@ -28,6 +29,7 @@ class _Stream:
     count: int = 0
     first: float | None = None
     last: float | None = None
+    channel_labels: tuple[str, ...] = ()
 
 
 class Recorder:
@@ -54,7 +56,9 @@ class Recorder:
                 inlet = StreamInlet(info, max_buflen=60)
                 inlet.open_stream(timeout=timeout)
                 try:
-                    clock_offset = float(inlet.time_correction(timeout=min(timeout, 1.0)))
+                    clock_offset = float(
+                        inlet.time_correction(timeout=min(timeout, 1.0))
+                    )
                 except Exception:
                     clock_offset = 0.0
                 writer.clock_offset(stream_id, float(local_clock()), clock_offset)
@@ -66,9 +70,14 @@ class Recorder:
                         descriptor.channel_count,
                         int(info.channel_format()),
                         descriptor.nominal_srate,
-                        LiveBuffer(descriptor.channel_count) if kind in _ANALYSIS_KINDS else None,
+                        LiveBuffer(descriptor.channel_count)
+                        if kind in _ANALYSIS_KINDS
+                        else None,
                         clock_offset,
                         time.monotonic() + 5.0,
+                        channel_labels=_channel_labels(
+                            info.as_xml(), descriptor.channel_count
+                        ),
                     )
                 )
         except Exception:
@@ -88,17 +97,34 @@ class Recorder:
                         monotonic_now = time.monotonic()
                         if monotonic_now >= state.next_clock_offset_at:
                             try:
-                                state.clock_offset = float(state.inlet.time_correction(timeout=0.0))
-                                writer.clock_offset(state.stream_id, float(local_clock()), state.clock_offset)
+                                state.clock_offset = float(
+                                    state.inlet.time_correction(timeout=0.0)
+                                )
+                                writer.clock_offset(
+                                    state.stream_id,
+                                    float(local_clock()),
+                                    state.clock_offset,
+                                )
                             except Exception:
                                 pass
                             state.next_clock_offset_at = monotonic_now + 5.0
-                        samples, timestamps = state.inlet.pull_chunk(timeout=0.0, max_samples=1024)
+                        samples, timestamps = state.inlet.pull_chunk(
+                            timeout=0.0, max_samples=1024
+                        )
                         if timestamps:
                             received = True
-                            writer.samples(state.stream_id, timestamps, samples, state.channels, state.channel_format)
+                            writer.samples(
+                                state.stream_id,
+                                timestamps,
+                                samples,
+                                state.channels,
+                                state.channel_format,
+                            )
                             if state.buffer is not None:
-                                corrected = [float(timestamp) + state.clock_offset for timestamp in timestamps]
+                                corrected = [
+                                    float(timestamp) + state.clock_offset
+                                    for timestamp in timestamps
+                                ]
                                 state.buffer.append(samples, corrected)
                             state.count += len(timestamps)
                             if state.first is None:
@@ -124,7 +150,9 @@ class Recorder:
 
         self._stop.clear()
         self._streams = {state.kind: state for state in streams}
-        self._thread = threading.Thread(target=run, name="braincheck-recorder", daemon=True)
+        self._thread = threading.Thread(
+            target=run, name="braincheck-recorder", daemon=True
+        )
         self._thread.start()
 
     def stop(self, timeout: float = 10.0) -> None:
@@ -151,6 +179,10 @@ class Recorder:
         state = self._streams.get(kind)
         return float(state.nominal_srate) if state is not None else 0.0
 
+    def channel_names(self, kind: str) -> tuple[str, ...]:
+        state = self._streams.get(kind)
+        return state.channel_labels if state is not None else ()
+
     def summary(self) -> dict[str, dict[str, object]]:
         return {
             kind: {
@@ -158,10 +190,23 @@ class Recorder:
                 "first_timestamp": state.first,
                 "last_timestamp": state.last,
                 "nominal_srate": state.nominal_srate,
+                "channel_names": list(state.channel_labels),
                 "clock_offset": state.clock_offset,
                 "arrival_inversion_count": (
-                    state.buffer.arrival_inversion_count if state.buffer is not None else 0
+                    state.buffer.arrival_inversion_count
+                    if state.buffer is not None
+                    else 0
                 ),
             }
             for kind, state in self._streams.items()
         }
+
+
+def _channel_labels(xml: str, count: int) -> tuple[str, ...]:
+    root = ET.fromstring(xml)
+    labels = tuple(
+        str(node.text or "") for node in root.findall("./desc/channels/channel/label")
+    )
+    if len(labels) == count and all(labels):
+        return labels
+    return tuple(f"EEG-{index + 1}" for index in range(count))

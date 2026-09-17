@@ -1,0 +1,80 @@
+{
+  "schema_version": "braincheck-eegnet-v1",
+  "available": true,
+  "model_type": "eegnet_torchscript",
+  "model_version": "eegnet-pilot-49d457921545",
+  "model_file": "braincheck_eegnet.pt",
+  "model_sha256": "49d4579215452cda148af71c72690559c8db1908af00162fa92e6a6e9210ad3b",
+  "task": "readiness_reference",
+  "classes": [
+    "alert",
+    "impaired"
+  ],
+  "input_shape": [
+    2,
+    1000
+  ],
+  "sample_rate_hz": 250,
+  "window_seconds": 4.0,
+  "step_seconds": 2.0,
+  "channel_names": [
+    "EEG-1",
+    "EEG-2"
+  ],
+  "preprocessing": "embedded_demean_fft_1_40_train_channel_scale",
+  "aggregation": "mean_window_probability",
+  "reference_label_versions": [
+    "reference-label-v1-provisional"
+  ],
+  "decision_threshold": null,
+  "temperature": 1.0,
+  "calibration_split": "none",
+  "training_mode": "pilot_fit_only",
+  "allowed_modes": [
+    "shadow",
+    "pilot_assisted"
+  ],
+  "independent_evaluation_available": false,
+  "calibration_balanced_accuracy": null,
+  "experimental": true,
+  "field_validated": false,
+  "default_mode": "pilot_assisted",
+  "best_epoch": 20,
+  "created_at": "2026-09-17T11:31:36.411284+00:00",
+  "seed": 20260917,
+  "torch_version": "2.12.0",
+  "subject_splits": {
+    "train": [
+      "P001",
+      "P002",
+      "P0086"
+    ],
+    "validation": [],
+    "test": []
+  },
+  "original_subject_splits": {
+    "train": [
+      "P001",
+      "P0086"
+    ],
+    "validation": [],
+    "test": [
+      "P002"
+    ]
+  },
+  "quality_profile": "pilot_clean_windows",
+  "dataset_sha256": "02c48a2d313b77067aa529d6ec6f6de8a11d22a912f7c4bcec22e6de38bb2e4d",
+  "metadata_sha256": "4a320fdf97cf14a243f6c756780482c25e840c7d19059570e209e7617fc2d11e",
+  "training_source": "bsense_reference_export",
+  "pilot_decision_policy": {
+    "threshold": 0.5,
+    "calibrated": false,
+    "basis": "engineering_demo_parameter",
+    "first_high": "retest",
+    "repeat_high": "rest",
+    "quality_failure": "unable",
+    "cannot_lower_rule_risk": true,
+    "max_motion_artifact_ratio": 0.4,
+    "min_clean_windows": 10
+  }
+}

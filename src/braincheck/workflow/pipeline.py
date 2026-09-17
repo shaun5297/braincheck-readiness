@@ -27,6 +27,7 @@ class ScreeningInput:
     fnirs_task: Sequence[Sequence[float]]
     motion_task: Sequence[Sequence[float]]
     stream_timestamps: Mapping[str, Sequence[float]]
+    motion_timestamps: Sequence[float] = ()
 
 
 def process(
@@ -36,10 +37,14 @@ def process(
     expected_trials: int = 180,
 ) -> tuple[ReadinessFeatures, GateResult]:
     behavior = behavior_features.extract(payload.sart_trials)
-    eeg_baseline_features = eeg_features.extract(payload.eeg_baseline, payload.eeg_sample_rate)
+    eeg_baseline_features = eeg_features.extract(
+        payload.eeg_baseline, payload.eeg_sample_rate
+    )
     eeg = eeg_features.extract(payload.eeg_task, payload.eeg_sample_rate)
     eeg.update(eeg_features.baseline_change(eeg_baseline_features, eeg))
-    motion = motion_quality.evaluate(payload.motion_task)
+    motion = motion_quality.evaluate(
+        payload.motion_task, timestamps=payload.motion_timestamps
+    )
     fnirs = fnirs_features.extract(
         payload.fnirs_baseline,
         payload.fnirs_task,
@@ -48,7 +53,9 @@ def process(
     behavior, eeg, has_personal = compare(behavior, eeg, personal_baseline)
     eeg_q = eeg_quality.evaluate([*payload.eeg_baseline, *payload.eeg_task])
     fnirs_q = fnirs_quality.evaluate([*payload.fnirs_baseline, *payload.fnirs_task])
-    timing_q = timing_quality.evaluate(payload.stream_timestamps, ("eeg", "fnirs", "motion"))
+    timing_q = timing_quality.evaluate(
+        payload.stream_timestamps, ("eeg", "fnirs", "motion")
+    )
     gate = quality_gate(
         eeg_q,
         fnirs_q,
@@ -66,4 +73,3 @@ def process(
         metadata={"personal_baseline_available": has_personal},
     )
     return features, gate
-
